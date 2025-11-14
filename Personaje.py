@@ -124,3 +124,4 @@ class Personaje:
         return f"{self.nombre} ({self.evolucion_actual} | nivel {self.nivel} | {self.hp} HP)"
 
 
+print("Hello")

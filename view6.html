@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mantenedor de Cargas ETL</title>
+
+<style>
+    body {
+        font-family: "Segoe UI", Roboto, sans-serif;
+        background: #eef1f5;
+        padding: 25px;
+        color: #333;
+    }
+
+    h1 {
+        margin-bottom: 5px;
+        font-size: 32px;
+        font-weight: 700;
+    }
+
+    .subtitle {
+        margin-top: 0;
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 25px;
+    }
+
+    .card {
+        background: white;
+        padding: 18px 22px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        border: 1px solid #ddd;
+    }
+
+    .directory {
+        border-left: 6px solid #0078ff;
+    }
+
+    summary {
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: 600;
+        padding: 8px 0;
+        transition: color 0.2s;
+    }
+
+    summary:hover { color: #0063d6; }
+
+    .rule {
+        background: #f9fafc;
+        padding: 14px;
+        border: 1px solid #dfe3ea;
+        margin: 10px 0;
+        border-radius: 10px;
+        transition: transform 0.15s, box-shadow 0.2s;
+    }
+
+    .rule:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+    }
+
+    .tag {
+        display: inline-block;
+        padding: 3px 9px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 8px;
+    }
+    .tag.xlsx { background: #d9ecff; color: #005db3; }
+    .tag.csv  { background: #fff1cc; color: #a88700; }
+
+    .notif-ok  { background:#c8ffd3; color:#0c6f22; padding:4px 8px; border-radius:8px; }
+    .notif-nrm { background:#fff3c4; color:#8a6d00; padding:4px 8px; border-radius:8px; }
+    .notif-none{ background:#ffd2d2; color:#8b0000; padding:4px 8px; border-radius:8px; }
+
+    .filter-bar {
+        display: flex;
+        gap: 8px;
+        margin: 10px 0 4px 0;
+        flex-wrap: wrap;
+    }
+    .filter-btn {
+        border: 1px solid #cfd8e3;
+        background: #f3f6fb;
+        color: #284b63;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .filter-btn.active {
+        background: #0078ff;
+        color: #fff;
+        border-color: #0078ff;
+    }
+
+    .edit-btn {
+        margin-top: 10px;
+        padding: 6px 12px;
+        background: #0078ff;
+        color: #fff;
+        border-radius: 8px;
+        cursor: pointer;
+        border:none;
+        font-size:12px;
+    }
+
+    .save-btn {
+        background: #00a32e;
+        color:white;
+        padding: 8px 12px;
+        border:none;
+        border-radius: 8px;
+        margin-top:10px;
+        cursor:pointer;
+    }
+
+    .cancel-btn {
+        background:#999;
+        color:white;
+        padding:8px 12px;
+        border:none;
+        border-radius: 8px;
+        margin-left:10px;
+        cursor:pointer;
+    }
+
+    textarea, input, select {
+        width:100%;
+        padding:8px;
+        margin-bottom:10px;
+        border:1px solid #ccc;
+        border-radius: 6px;
+        font-size:13px;
+    }
+</style>
+</head>
+<body>
+
+<h1>Mantenedor de Cargas ETL</h1>
+<p class="subtitle">
+    Visualización automática + edición en <strong>etl_config.json</strong> y <strong>notification_config.json</strong>.
+</p>
+
+<div id="container"></div>
+
+<script>
+// ---------------------------- UTILIDADES ----------------------------
+function normalize(s){
+    return s.normalize("NFKD")
+            .replace(/[\u0300-\u036f]/g,"")
+            .toLowerCase()
+            .trim();
+}
+
+async function loadJSON(path){ return (await fetch(path)).json(); }
+
+async function saveJson(file, data){
+    const res = await fetch(`http://localhost:8000/save/${file}`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify(data)
+    });
+    return res.text();
+}
+
+// ---------------------------- APLICACIÓN ----------------------------
+async function init(){
+    const etl = await loadJSON("etl_config.json");
+    const notif = await loadJSON("notification_config.json");
+
+    const exact = {}, norm = {}, defaults = {};
+    notif.directories.forEach(dir=>{
+        defaults[dir.path] = dir.default_recipients || [];
+        (dir.recipient_rules||[]).forEach(rule=>{
+            const p = rule.pattern, n = normalize(p);
+            if(!exact[p]) exact[p]=[];
+            exact[p].push(rule);
+            if(!norm[n]) norm[n]=[];
+            norm[n].push(rule);
+        });
+    });
+
+    const container = document.getElementById("container");
+    let total = 0;
+
+    const totalCard = document.createElement("div");
+    totalCard.className="card";
+    container.appendChild(totalCard);
+
+    etl.directories.forEach((dir, dirIdx)=>{
+        const rules = dir.route_rules||[];
+        total += rules.length;
+
+        const div = document.createElement("div");
+        div.className="card directory";
+
+        div.innerHTML = `
+        <details>
+            <summary>${dir.path} — <span style="font-size:14px;color:#444">${rules.length} cargas</span></summary>
+
+            <p><strong>Archivo OK:</strong> ${dir.archive_dir}</p>
+            <p><strong>Errores a:</strong> ${dir.failed_dir}</p>
+
+            <div class="filter-bar">
+                <button class="filter-btn active" data-filter="all">Todos</button>
+                <button class="filter-btn" data-filter="with">Con notificación</button>
+                <button class="filter-btn" data-filter="without">Sin notificación</button>
+            </div>
+
+            <h4>Reglas detectadas:</h4>
+            <div data-rules></div>
+        </details>
+        `;
+
+        const rulesContainer = div.querySelector("[data-rules]");
+
+        rules.forEach((rule, rIdx)=>{
+            const raw = rule.pattern;
+            const nrm = normalize(raw);
+            const fileType = (rule.target?.file_type||"").toLowerCase();
+
+            let status="none", recipients=[], cc=[], note="", badge="";
+
+            if(exact[raw]){
+                status="exact";
+                badge="Notificación asignada";
+                note="Coincidencia exacta";
+                recipients=[...new Set(exact[raw].flatMap(x=>x.recipients||[]))];
+                cc=[...new Set(exact[raw].flatMap(x=>x.cc||[]))];
+            }
+            else if(norm[nrm]){
+                status="normalized";
+                badge="Normalizada";
+                note="Coincidencia normalizada";
+                recipients=[...new Set(norm[nrm].flatMap(x=>x.recipients||[]))];
+                cc=[...new Set(norm[nrm].flatMap(x=>x.cc||[]))];
+            }
+            else if((defaults[dir.path]||[]).length){
+                status="default";
+                badge="Sin notificación";
+                note="Usa default del directorio";
+                recipients = defaults[dir.path];
+            }
+            else{
+                status="none";
+                badge="Sin notificación";
+                note="No existe match";
+            }
+
+            const hasNotif = (status==="exact" || status==="normalized");
+            const tagClass = fileType==="csv" ? "tag csv" : "tag xlsx";
+
+            const box = document.createElement("div");
+            box.className="rule";
+            box.dataset.status = hasNotif ? "with" : "without";
+
+            box.innerHTML = `
+                <p><strong>Pattern:</strong> <span data-field="pattern">${raw}</span>
+                    <span class="${tagClass}">${fileType.toUpperCase()}</span>
+                </p>
+
+                <p><strong>Descripción:</strong> <span data-field="description">${rule.description||""}</span></p>
+
+                <p>
+                    <span class="${ status==="exact"?"notif-ok":status==="normalized"?"notif-nrm":"notif-none"}">${badge}</span>
+                    <small>${note}</small>
+                </p>
+
+                <p><strong>Destinatarios:</strong> <span data-field="recipients">${recipients.join(", ")||"—"}</span></p>
+                <p><strong>CC:</strong> <span data-field="cc">${cc.join(", ")||"—"}</span></p>
+                <p><strong>Base:</strong> <span data-field="database">${rule.target.database||""}</span></p>
+                <p><strong>Tabla:</strong> <span data-field="table">${rule.target.table||""}</span></p>
+
+                <button class="edit-btn">Editar</button>
+
+                <div class="edit-form" style="display:none; margin-top:10px; background:#eef4ff; padding:10px; border-radius:8px;">
+                    <label>Pattern</label>
+                    <input data-edit="pattern">
+
+                    <label>Descripción</label>
+                    <textarea data-edit="description"></textarea>
+
+                    <label>Base</label>
+                    <input data-edit="database">
+
+                    <label>Tabla</label>
+                    <input data-edit="table">
+
+                    <label>Destinatarios</label>
+                    <textarea data-edit="recipients"></textarea>
+
+                    <label>CC</label>
+                    <textarea data-edit="cc"></textarea>
+
+                    <label>Guardar en:</label>
+                    <select data-edit="file">
+                        <option value="etl_config">etl_config.json</option>
+                        <option value="notification_config">notification_config.json</option>
+                    </select>
+
+                    <button class="save-btn">Guardar</button>
+                    <button class="cancel-btn">Cancelar</button>
+                </div>
+            `;
+
+            // ---------- Eventos editar ----------
+            const editBtn = box.querySelector(".edit-btn");
+            const form = box.querySelector(".edit-form");
+
+            editBtn.addEventListener("click", ()=>{
+                form.style.display="block";
+
+                form.querySelector("[data-edit='pattern']").value = raw;
+                form.querySelector("[data-edit='description']").value = rule.description||"";
+                form.querySelector("[data-edit='database']").value = rule.target.database||"";
+                form.querySelector("[data-edit='table']").value = rule.target.table||"";
+                form.querySelector("[data-edit='recipients']").value = recipients.join(", ");
+                form.querySelector("[data-edit='cc']").value = cc.join(", ");
+            });
+
+            form.querySelector(".cancel-btn").addEventListener("click", ()=>{
+                form.style.display="none";
+            });
+
+            form.querySelector(".save-btn").addEventListener("click", async ()=>{
+                const fileSel = form.querySelector("[data-edit='file']").value;
+
+                const newPattern = form.querySelector("[data-edit='pattern']").value.trim();
+                const newDesc    = form.querySelector("[data-edit='description']").value.trim();
+                const newDB      = form.querySelector("[data-edit='database']").value.trim();
+                const newTable   = form.querySelector("[data-edit='table']").value.trim();
+                const newRec     = form.querySelector("[data-edit='recipients']").value.split(",").map(x=>x.trim()).filter(x=>x);
+                const newCC      = form.querySelector("[data-edit='cc']").value.split(",").map(x=>x.trim()).filter(x=>x);
+
+                if(fileSel==="etl_config"){
+                    etl.directories[dirIdx].route_rules[rIdx].pattern = newPattern;
+                    etl.directories[dirIdx].route_rules[rIdx].description = newDesc;
+                    etl.directories[dirIdx].route_rules[rIdx].target.database = newDB;
+                    etl.directories[dirIdx].route_rules[rIdx].target.table = newTable;
+                } else {
+                    notif.directories.forEach(d=>{
+                        (d.recipient_rules||[]).forEach(r=>{
+                            if(r.pattern===raw){
+                                r.pattern = newPattern;
+                                r.description = newDesc;
+                                r.recipients = newRec;
+                                r.cc = newCC;
+                            }
+                        });
+                    });
+                }
+
+                await saveJson(fileSel, fileSel==="etl_config"? etl : notif);
+
+                alert("Cambios guardados correctamente.");
+                location.reload();
+            });
+
+            rulesContainer.appendChild(box);
+        });
+
+        // filtros
+        const bar = div.querySelector(".filter-bar");
+        const btns = bar.querySelectorAll(".filter-btn");
+
+        btns.forEach(btn=>{
+            btn.addEventListener("click", ()=>{
+                btns.forEach(b=>b.classList.remove("active"));
+                btn.classList.add("active");
+
+                const type = btn.dataset.filter;
+                const cards = rulesContainer.querySelectorAll(".rule");
+
+                cards.forEach(c=>{
+                    if(type==="all") c.style.display="";
+                    else if(type==="with" && c.dataset.status==="with") c.style.display="";
+                    else if(type==="without" && c.dataset.status==="without") c.style.display="";
+                    else c.style.display="none";
+                });
+            });
+        });
+
+        container.appendChild(div);
+    });
+
+    totalCard.innerHTML = `<h2>Total de cargas detectadas: ${total}</h2>`;
+}
+
+init();
+</script>
+
+</body>
+</html>

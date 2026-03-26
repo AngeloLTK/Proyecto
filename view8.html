@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mantenedor de Cargas ETL</title>
+
+<style>
+    body {
+        font-family: "Segoe UI", Roboto, sans-serif;
+        background: #eef1f5;
+        padding: 25px;
+        color: #333;
+    }
+
+    h1 {
+        margin-bottom: 5px;
+        font-size: 32px;
+        font-weight: 700;
+    }
+
+    .subtitle {
+        margin-top: 0;
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 18px;
+    }
+
+    .action-bar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        border: 1px solid #cfd8e3;
+        background: #0078ff;
+        color: #fff;
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-size: 13px;
+        cursor: pointer;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.06);
+    }
+    .btn.secondary {
+        background: #f3f6fb;
+        color: #284b63;
+        border-color: #cfd8e3;
+    }
+
+    .card {
+        background: white;
+        padding: 18px 22px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        border: 1px solid #ddd;
+    }
+
+    .directory {
+        border-left: 6px solid #0078ff;
+    }
+
+    summary {
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: 600;
+        padding: 8px 0;
+        transition: color 0.2s;
+    }
+
+    summary:hover { color: #0063d6; }
+
+    .rule {
+        background: #f9fafc;
+        padding: 14px;
+        border: 1px solid #dfe3ea;
+        margin: 10px 0;
+        border-radius: 10px;
+        transition: transform 0.15s, box-shadow 0.2s;
+    }
+
+    .rule:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+    }
+
+    .tag {
+        display: inline-block;
+        padding: 3px 9px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 8px;
+    }
+    .tag.xlsx { background: #d9ecff; color: #005db3; }
+    .tag.csv  { background: #fff1cc; color: #a88700; }
+
+    .notif-ok  { background:#c8ffd3; color:#0c6f22; padding:4px 8px; border-radius:8px; }
+    .notif-nrm { background:#fff3c4; color:#8a6d00; padding:4px 8px; border-radius:8px; }
+    .notif-none{ background:#ffd2d2; color:#8b0000; padding:4px 8px; border-radius:8px; }
+
+    .filter-bar {
+        display: flex;
+        gap: 8px;
+        margin: 10px 0 4px 0;
+        flex-wrap: wrap;
+    }
+    .filter-btn {
+        border: 1px solid #cfd8e3;
+        background: #f3f6fb;
+        color: #284b63;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .filter-btn.active {
+        background: #0078ff;
+        color: #fff;
+        border-color: #0078ff;
+    }
+
+    .edit-btn {
+        margin-top: 10px;
+        padding: 6px 12px;
+        background: #0078ff;
+        color: #fff;
+        border-radius: 8px;
+        cursor: pointer;
+        border:none;
+        font-size:12px;
+    }
+
+    .save-btn {
+        background: #00a32e;
+        color:white;
+        padding: 8px 12px;
+        border:none;
+        border-radius: 8px;
+        margin-top:10px;
+        cursor:pointer;
+    }
+
+    .cancel-btn {
+        background:#999;
+        color:white;
+        padding:8px 12px;
+        border:none;
+        border-radius: 8px;
+        margin-left:10px;
+        cursor:pointer;
+    }
+
+    textarea, input, select {
+        width:100%;
+        padding:8px;
+        margin-bottom:10px;
+        border:1px solid #ccc;
+        border-radius: 6px;
+        font-size:13px;
+        background: #fff;
+    }
+
+    .hint {
+        font-size: 11px;
+        color:#6b7280;
+        margin: 2px 0 6px 0;
+    }
+
+    /* MODAL */
+    .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+        display:none; align-items:center; justify-content:center; z-index: 1000;
+    }
+    .modal {
+        width: min(900px, 92vw);
+        background: #fff; border-radius: 14px; overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        transform: translateY(-8px);
+        animation: pop .15s ease-out;
+    }
+    @keyframes pop { from { opacity:0; transform: translateY(-8px);} to {opacity:1; transform: translateY(0);} }
+    .modal-header {
+        background: #0a66d1; color: #fff;
+        padding: 14px 18px; display:flex; align-items:center; justify-content:space-between;
+    }
+    .modal-body { padding: 16px 18px; max-height: 70vh; overflow:auto; }
+    .modal-footer { padding: 14px 18px; background: #f7f9fc; display:flex; gap:10px; justify-content:flex-end; }
+
+    .close-x { cursor:pointer; font-weight:700; font-size: 18px; }
+    .grid-2 {
+        display:grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    .grid-3 {
+        display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
+    }
+    @media (max-width: 860px){
+        .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    .section-title {
+        margin-top: 4px; margin-bottom: 6px;
+        font-weight: 700; color:#374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;
+    }
+</style>
+</head>
+<body>
+
+<h1>Mantenedor de Cargas ETL</h1>
+<p class="subtitle">
+    Visualización automática + edición en <strong>etl_config.json</strong> y <strong>notification_config.json</strong>.
+</p>
+
+<div class="action-bar">
+    <button id="btnNewEtl" class="btn">+ Nueva Carga ETL</button>
+    <button id="btnNewNotif" class="btn secondary">+ Nueva Regla de Notificación</button>
+</div>
+
+<div id="container"></div>
+
+<!-- MODAL NUEVA CARGA ETL -->
+<div id="modalEtl" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <div>Nueva Carga ETL</div>
+      <div class="close-x" data-close-etl>&times;</div>
+    </div>
+    <div class="modal-body">
+      <div class="grid-3">
+        <div>
+          <div class="section-title">Ubicación</div>
+          <label>Directorio destino</label>
+          <div class="hint">Selecciona en qué carpeta del ETL se insertará la regla.</div>
+          <select id="etl_dir"></select>
+        </div>
+        <div>
+          <div class="section-title">Tipo de archivo</div>
+          <label>file_type</label>
+          <div class="hint">Excel (.xlsx) o CSV. Activa campos específicos según el tipo.</div>
+          <select id="etl_file_type">
+            <option value="xlsx">xlsx</option>
+            <option value="csv">csv</option>
+          </select>
+        </div>
+        <div>
+          <div class="section-title">Identificación</div>
+          <label>pattern (regex)</label>
+          <div class="hint">Ej: <code>.*mi_archivo.*\.xlsx$</code> — Usa regex, evita nombres fijos.</div>
+          <input id="etl_pattern" placeholder=".*mi_archivo.*\.xlsx$">
+        </div>
+      </div>
+
+      <div>
+        <label>description</label>
+        <div class="hint">Describe brevemente el propósito de esta carga. Ej: “Archivo de provisión TMP”.</div>
+        <input id="etl_description" placeholder="Archivo de ...">
+      </div>
+
+      <div class="section-title">Destino (target.*)</div>
+      <div class="grid-3">
+        <div>
+          <label>server</label>
+          <div class="hint">Ej: <code>SRVTH</code></div>
+          <input id="etl_server" placeholder="SRVTH" value="SRVTH">
+        </div>
+        <div>
+          <label>database</label>
+          <div class="hint">Selecciona una BD existente en ETL (autodetectada).</div>
+          <select id="etl_database"></select>
+        </div>
+        <div>
+          <label>schema</label>
+          <div class="hint">Ej: <code>dbo</code></div>
+          <input id="etl_schema" placeholder="dbo" value="dbo">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label>table</label>
+          <div class="hint">Ej: <code>TH_ADM_STG_MiTabla</code></div>
+          <input id="etl_table" placeholder="TH_XXX_STG_MiTabla">
+        </div>
+        <div>
+          <label>driver</label>
+          <div class="hint">Por defecto: <code>ODBC Driver 17 for SQL Server</code></div>
+          <input id="etl_driver" value="ODBC Driver 17 for SQL Server">
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div>
+          <label>encrypt</label>
+          <div class="hint">Ej: “yes” o “no”</div>
+          <input id="etl_encrypt" value="yes">
+        </div>
+        <div>
+          <label>trust_cert</label>
+          <div class="hint">Ej: “yes” o “no”</div>
+          <input id="etl_trust" value="yes">
+        </div>
+        <div>
+          <label>merge_procedure</label>
+          <div class="hint">Nombre de SP si aplica. Ej: <code>TH_ADM_Carga_...</code></div>
+          <input id="etl_merge_procedure" placeholder="">
+        </div>
+      </div>
+
+      <div id="etl_xlsx_block">
+        <div class="section-title">Campos XLSX</div>
+        <div class="grid-3">
+          <div>
+            <label>sheet_name</label>
+            <div class="hint">Ej: “Hoja1”, “Carga”, “Sheet1”.</div>
+            <input id="etl_sheet" placeholder="Hoja1">
+          </div>
+          <div>
+            <label>skip_rows</label>
+            <div class="hint">Filas a saltar antes de la cabecera (0 si no aplica).</div>
+            <input id="etl_skip" type="number" value="0" min="0">
+          </div>
+          <div>
+            <label>preserve_text</label>
+            <div class="hint">true/false — si quieres preservar texto literal.</div>
+            <select id="etl_preserve">
+              <option value="false" selected>false</option>
+              <option value="true">true</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="etl_csv_block" style="display:none;">
+        <div class="section-title">Campos CSV</div>
+        <div class="grid-3">
+          <div>
+            <label>csv_delimiter</label>
+            <div class="hint">Ej: “;”  “,”  “|”</div>
+            <input id="etl_csv_delim" value=";">
+          </div>
+          <div>
+            <label>csv_encoding</label>
+            <div class="hint">Ej: utf-8, latin1</div>
+            <input id="etl_csv_enc" value="utf-8">
+          </div>
+          <div>
+            <label>csv_has_header</label>
+            <div class="hint">true/false — si la primera fila es cabecera</div>
+            <select id="etl_csv_header">
+              <option value="true" selected>true</option>
+              <option value="false">false</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label>expected_columns (separadas por coma)</label>
+        <div class="hint">Ej: <code>RUT,Nombre,Tabla,Valor</code> — Si no aplica, deja vacío.</div>
+        <textarea id="etl_expected" placeholder=""></textarea>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="save-btn" id="etl_save">Guardar carga</button>
+      <button class="cancel-btn" data-close-etl>Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVA NOTIFICACIÓN -->
+<div id="modalNotif" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <div>Nueva Regla de Notificación</div>
+      <div class="close-x" data-close-notif>&times;</div>
+    </div>
+    <div class="modal-body">
+
+      <div class="grid-2">
+        <div>
+          <div class="section-title">Ubicación</div>
+          <label>Directorio destino</label>
+          <div class="hint">Selecciona la carpeta dentro de <code>notification_config.json</code>.</div>
+          <select id="notif_dir"></select>
+        </div>
+        <div>
+          <div class="section-title">Identificación</div>
+          <label>pattern (regex)</label>
+          <div class="hint">Ej: <code>.*mi_archivo.*\.xlsx$</code> — Debe matchear con el de ETL.</div>
+          <input id="notif_pattern" placeholder=".*mi_archivo.*\.xlsx$">
+        </div>
+      </div>
+
+      <div>
+        <label>description</label>
+        <div class="hint">Descripción breve. Ej: “Aviso carga de XYZ”.</div>
+        <input id="notif_description" placeholder="Notificación para ...">
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label>recipients</label>
+          <div class="hint">Correos separados por coma. Ej: <code>correo@empresa.cl, otro@empresa.cl</code></div>
+          <textarea id="notif_recipients"></textarea>
+        </div>
+        <div>
+          <label>cc</label>
+          <div class="hint">Opcional. Correos separados por coma.</div>
+          <textarea id="notif_cc"></textarea>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="save-btn" id="notif_save">Guardar notificación</button>
+      <button class="cancel-btn" data-close-notif>Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --------------------------------------------------
+// UTILIDADES (fetch SIN caché)
+// --------------------------------------------------
+async function loadJSON(path){
+    const url = `${path}?t=${Date.now()}`;
+    const resp = await fetch(url, { cache:"no-store" });
+    if(!resp.ok) throw new Error("Error cargando: "+path);
+    return await resp.json();
+}
+async function saveJSON(file, data){
+    const resp = await fetch(`http://localhost:8000/save/${file}`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify(data)
+    });
+    if(!resp.ok){
+        const text = await resp.text();
+        throw new Error(text || "Error al guardar");
+    }
+    return resp.text();
+}
+function normalize(s){
+    return s.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+}
+function unique(arr){ return Array.from(new Set(arr.filter(Boolean))); }
+
+// Datos globales en memoria
+let ETL = null;
+let NOTIF = null;
+
+// --------------------------------------------------
+// INIT → carga JSONs y llama render()
+// --------------------------------------------------
+async function init(){
+    ETL   = await loadJSON("etl_config.json");
+    NOTIF = await loadJSON("notification_config.json");
+    render(ETL, NOTIF);
+    wireCreateButtons(); // después de render
+}
+
+// --------------------------------------------------
+// RERENDER → después de guardar cambios
+// --------------------------------------------------
+async function rerenderFresh(){
+    ETL   = await loadJSON("etl_config.json");
+    NOTIF = await loadJSON("notification_config.json");
+    const container = document.getElementById("container");
+    container.innerHTML = "";
+    render(ETL, NOTIF);
+    wireCreateButtons();
+}
+
+// --------------------------------------------------
+// RENDER PRINCIPAL (listado y filtros existentes)
+// --------------------------------------------------
+function render(etl, notif){
+    const container = document.getElementById("container");
+
+    // Indexación de notificaciones
+    const exact = {}, norm = {}, defaults = {};
+    (notif.directories||[]).forEach(d=>{
+        defaults[d.path] = d.default_recipients || [];
+        (d.recipient_rules||[]).forEach(r=>{
+            const p = r.pattern;
+            const n = normalize(p);
+            if(!exact[p]) exact[p]=[];
+            exact[p].push(r);
+            if(!norm[n]) norm[n]=[];
+            norm[n].push(r);
+        });
+    });
+
+    let total = 0;
+    const totalCard = document.createElement("div");
+    totalCard.className="card";
+    container.appendChild(totalCard);
+
+    (etl.directories||[]).forEach((dir, di)=>{
+        const rules = dir.route_rules || [];
+        total += rules.length;
+
+        const div = document.createElement("div");
+        div.className="card directory";
+
+        div.innerHTML = `
+        <details>
+            <summary>${dir.path} — <small>${rules.length} cargas</small></summary>
+
+            <p><strong>Archivo OK:</strong> ${dir.archive_dir}</p>
+            <p><strong>Errores a:</strong> ${dir.failed_dir}</p>
+
+            <div class="filter-bar">
+                <button class="filter-btn active" data-filter="all">Todos</button>
+                <button class="filter-btn" data-filter="with">Con notificación</button>
+                <button class="filter-btn" data-filter="without">Sin notificación</button>
+            </div>
+
+            <h4>Reglas detectadas:</h4>
+            <div data-rules></div>
+        </details>
+        `;
+
+        const rulesContainer = div.querySelector("[data-rules]");
+
+        rules.forEach((rule)=>{
+            const raw = rule.pattern;
+            const nrm = normalize(raw);
+            const fileType = (rule.target?.file_type || "").toLowerCase();
+
+            let status="none", badge="", note="", recipients=[], cc=[];
+            if(exact[raw]){
+                status="exact"; badge="Notificación asignada"; note="Coincidencia exacta";
+                recipients = unique(exact[raw].flatMap(r=>r.recipients||[]));
+                cc = unique(exact[raw].flatMap(r=>r.cc||[]));
+            }
+            else if(norm[nrm]){
+                status="normalized"; badge="Normalizada"; note="Coincidencia normalizada";
+                recipients = unique(norm[nrm].flatMap(r=>r.recipients||[]));
+                cc = unique(norm[nrm].flatMap(r=>r.cc||[]));
+            }
+            else if((defaults[dir.path]||[]).length){
+                status="default"; badge="Sin notificación"; note="Usa default del directorio";
+                recipients = defaults[dir.path];
+            }
+            else {
+                status="none"; badge="Sin notificación"; note="No existe match";
+            }
+
+            const hasNotif = (status==="exact" || status==="normalized");
+            const tagClass = fileType==="csv" ? "tag csv" : "tag xlsx";
+
+            const box = document.createElement("div");
+            box.className="rule";
+            box.dataset.status = hasNotif ? "with" : "without";
+
+            box.innerHTML = `
+                <p><strong>Pattern:</strong> <span>${raw}</span>
+                    <span class="${tagClass}">${fileType.toUpperCase()}</span>
+                </p>
+
+                <p><strong>Descripción:</strong> <span>${rule.description||""}</span></p>
+
+                <p>
+                    <span class="${
+                        status==="exact" ? "notif-ok" :
+                        status==="normalized" ? "notif-nrm" :
+                        "notif-none"
+                    }">${badge}</span>
+                    <small>${note}</small>
+                </p>
+
+                <p><strong>Destinatarios:</strong> ${recipients.join(", ")||"—"}</p>
+                <p><strong>CC:</strong> ${cc.join(", ")||"—"}</p>
+
+                <p><strong>Base:</strong> ${rule.target?.database||""}</p>
+                <p><strong>Tabla:</strong> ${rule.target?.table||""}</p>
+            `;
+
+            rulesContainer.appendChild(box);
+        });
+
+        // Filtros
+        const btns = div.querySelectorAll(".filter-btn");
+        btns.forEach(btn=>{
+            btn.addEventListener("click", ()=>{
+                btns.forEach(b=>b.classList.remove("active"));
+                btn.classList.add("active");
+
+                const type = btn.dataset.filter;
+                const cards = rulesContainer.querySelectorAll(".rule");
+
+                cards.forEach(c=>{
+                    if(type==="all") c.style.display="";
+                    else if(type==="with" && c.dataset.status==="with") c.style.display="";
+                    else if(type==="without" && c.dataset.status==="without") c.style.display="";
+                    else c.style.display="none";
+                });
+            });
+        });
+
+        container.appendChild(div);
+    });
+
+    totalCard.innerHTML = `<h2>Total de cargas detectadas: ${total}</h2>`;
+}
+
+// --------------------------------------------------
+// BOTONES CREAR + MODALES
+// --------------------------------------------------
+function wireCreateButtons(){
+    const btnNewEtl   = document.getElementById("btnNewEtl");
+    const btnNewNotif = document.getElementById("btnNewNotif");
+    const modalEtl    = document.getElementById("modalEtl");
+    const modalNotif  = document.getElementById("modalNotif");
+
+    // --- ETL
+    btnNewEtl.onclick = ()=>{
+        openModalEtl();
+    };
+    Array.from(document.querySelectorAll("[data-close-etl]")).forEach(el=>{
+        el.onclick = ()=> modalEtl.style.display="none";
+    });
+
+    // --- NOTIF
+    btnNewNotif.onclick = ()=>{
+        openModalNotif();
+    };
+    Array.from(document.querySelectorAll("[data-close-notif]")).forEach(el=>{
+        el.onclick = ()=> modalNotif.style.display="none";
+    });
+}
+
+// Autodetectar listas (directorios & bases)
+function getEtlDirectories(){ return (ETL.directories||[]).map(d=>d.path); }
+function getNotifDirectories(){ return (NOTIF.directories||[]).map(d=>d.path); }
+function getDatabases(){
+    const all = [];
+    (ETL.directories||[]).forEach(d=>{
+        (d.route_rules||[]).forEach(r=>{
+            const db = r.target?.database || "";
+            if(db) all.push(db);
+        });
+    });
+    const uniq = unique(all).sort((a,b)=>a.localeCompare(b));
+    // fallback si no hubiera
+    return uniq.length? uniq : ["COM","ADM","CDG","CYD","DOR","BUC_SQL","REM","BEN","SCT","TH_MTP","RRLL"];
+}
+
+// --- LÓGICA MODAL ETL ---
+function openModalEtl(){
+    const modal = document.getElementById("modalEtl");
+    modal.style.display="flex";
+
+    // Fill dropdowns
+    const dirSel  = document.getElementById("etl_dir");
+    const dbSel   = document.getElementById("etl_database");
+    const typeSel = document.getElementById("etl_file_type");
+
+    dirSel.innerHTML = getEtlDirectories().map(p=>`<option value="${p}">${p}</option>`).join("");
+    dbSel.innerHTML  = getDatabases().map(x=>`<option value="${x}">${x}</option>`).join("");
+
+    // defaults
+    document.getElementById("etl_pattern").value = ".*mi_archivo.*\\.xlsx$";
+    document.getElementById("etl_description").value = "";
+    document.getElementById("etl_server").value = "SRVTH";
+    document.getElementById("etl_schema").value = "dbo";
+    document.getElementById("etl_driver").value = "ODBC Driver 17 for SQL Server";
+    document.getElementById("etl_encrypt").value = "yes";
+    document.getElementById("etl_trust").value = "yes";
+    document.getElementById("etl_merge_procedure").value = "";
+    document.getElementById("etl_sheet").value = "Hoja1";
+    document.getElementById("etl_skip").value = 0;
+    document.getElementById("etl_preserve").value = "false";
+    document.getElementById("etl_csv_delim").value = ";";
+    document.getElementById("etl_csv_enc").value = "utf-8";
+    document.getElementById("etl_csv_header").value = "true";
+    document.getElementById("etl_expected").value = "";
+
+    // show/hide blocks by type
+    const xlsxBlock = document.getElementById("etl_xlsx_block");
+    const csvBlock  = document.getElementById("etl_csv_block");
+    const toggleBlocks = ()=>{
+        const t = typeSel.value;
+        xlsxBlock.style.display = (t==="xlsx")? "block":"none";
+        csvBlock.style.display  = (t==="csv")? "block":"none";
+    };
+    toggleBlocks();
+    typeSel.onchange = toggleBlocks;
+
+    // Guardar
+    document.getElementById("etl_save").onclick = async ()=>{
+        try {
+            const dirPath   = dirSel.value || (getEtlDirectories()[0] || "./dev");
+            const pattern   = document.getElementById("etl_pattern").value.trim();
+            const desc      = document.getElementById("etl_description").value.trim();
+            const server    = document.getElementById("etl_server").value.trim();
+            const database  = dbSel.value.trim();
+            const schema    = document.getElementById("etl_schema").value.trim();
+            const table     = document.getElementById("etl_table").value.trim();
+            const driver    = document.getElementById("etl_driver").value.trim();
+            const encrypt   = document.getElementById("etl_encrypt").value.trim();
+            const trust     = document.getElementById("etl_trust").value.trim();
+            const mergeProc = document.getElementById("etl_merge_procedure").value.trim();
+            const fileType  = document.getElementById("etl_file_type").value;
+
+            const sheet     = document.getElementById("etl_sheet").value.trim();
+            const skip      = parseInt(document.getElementById("etl_skip").value,10) || 0;
+            const preserve  = document.getElementById("etl_preserve").value === "true";
+
+            const delim     = document.getElementById("etl_csv_delim").value.trim();
+            const enc       = document.getElementById("etl_csv_enc").value.trim();
+            const hasHeader = document.getElementById("etl_csv_header").value === "true";
+
+            const expected  = document.getElementById("etl_expected").value.trim();
+            const expectedArr = expected ? expected.split(",").map(x=>x.trim()).filter(Boolean) : [];
+
+            if(!pattern){ alert("pattern es obligatorio"); return; }
+            if(!database){ alert("database es obligatorio"); return; }
+            if(!table){ alert("table es obligatorio"); return; }
+
+            // Armar objeto newRule como en tu JSON (sin username/password en UI pero guardados vacíos)
+            const tgt = {
+                server, database, schema, table,
+                username: "", password: "",
+                encrypt, trust_cert: trust, driver,
+                file_type: fileType,
+                expected_columns: expectedArr,
+                merge_procedure: mergeProc
+            };
+            if(fileType==="xlsx"){
+                tgt.sheet_name   = sheet;
+                tgt.skip_rows    = skip;
+                tgt.preserve_text= preserve;
+            } else {
+                tgt.csv_delimiter   = delim || ";";
+                tgt.csv_encoding    = enc || "utf-8";
+                tgt.csv_has_header  = hasHeader;
+                tgt.skip_rows       = 0;
+                tgt.preserve_text   = false;
+            }
+
+            const newRule = { pattern, description: desc, target: tgt };
+
+            // Insertar en el directorio elegido
+            const dirObj = (ETL.directories||[]).find(d=>d.path===dirPath);
+            if(!dirObj){ alert("No se encontró el directorio seleccionado en etl_config.json"); return; }
+            if(!dirObj.route_rules) dirObj.route_rules = [];
+            dirObj.route_rules.push(newRule);
+
+            // Guardar
+            await saveJSON("etl_config", ETL);
+            alert("Nueva carga ETL creada y guardada ✔");
+            document.getElementById("modalEtl").style.display="none";
+            await rerenderFresh();
+        } catch(e){
+            alert("Error al guardar ETL: " + e.message);
+        }
+    };
+}
+
+// --- LÓGICA MODAL NOTIF ---
+function openModalNotif(){
+    const modal = document.getElementById("modalNotif");
+    modal.style.display="flex";
+
+    const dirSel = document.getElementById("notif_dir");
+    dirSel.innerHTML = getNotifDirectories().map(p=>`<option value="${p}">${p}</option>`).join("");
+
+    // Defaults
+    document.getElementById("notif_pattern").value = ".*mi_archivo.*\\.xlsx$";
+    document.getElementById("notif_description").value = "";
+    document.getElementById("notif_recipients").value = "";
+    document.getElementById("notif_cc").value = "";
+
+    document.getElementById("notif_save").onclick = async ()=>{
+        try {
+            const dirPath = dirSel.value || (getNotifDirectories()[0] || "./dev");
+            const pattern = document.getElementById("notif_pattern").value.trim();
+            const desc    = document.getElementById("notif_description").value.trim();
+            const rec     = document.getElementById("notif_recipients").value.split(",").map(x=>x.trim()).filter(Boolean);
+            const cc      = document.getElementById("notif_cc").value.split(",").map(x=>x.trim()).filter(Boolean);
+
+            if(!pattern){ alert("pattern es obligatorio"); return; }
+
+            const newRule = {
+                pattern, description: desc,
+                recipients: rec, cc: cc
+            };
+
+            const dirObj = (NOTIF.directories||[]).find(d=>d.path===dirPath);
+            if(!dirObj){ alert("No se encontró el directorio seleccionado en notification_config.json"); return; }
+            if(!dirObj.recipient_rules) dirObj.recipient_rules = [];
+            dirObj.recipient_rules.push(newRule);
+
+            await saveJSON("notification_config", NOTIF);
+            alert("Nueva regla de notificación creada y guardada ✔");
+            document.getElementById("modalNotif").style.display="none";
+            await rerenderFresh();
+        } catch(e){
+            alert("Error al guardar notificación: " + e.message);
+        }
+    };
+}
+
+// Lanzar
+init();
+</script>
+
+</body>
+</html>

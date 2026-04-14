@@ -18,16 +18,20 @@ LOG_BUFFER = deque(maxlen=2000)
 LOG_LOCK = threading.Lock()
 
 
-def add_log(message, source="SERVER"):
+def add_log(message, source="SERVER", store=True, echo=True):
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     entry = {
         "timestamp": ts,
         "source": source,
         "message": str(message).rstrip()
     }
-    with LOG_LOCK:
-        LOG_BUFFER.append(entry)
-    print(f"[{ts}] [{source}] {message}")
+
+    if store:
+        with LOG_LOCK:
+            LOG_BUFFER.append(entry)
+
+    if echo:
+        print(f"[{ts}] [{source}] {message}")
 
 
 def read_stream(stream, source):
@@ -36,7 +40,9 @@ def read_stream(stream, source):
             line = stream.readline()
             if not line:
                 break
-            add_log(line.rstrip("\n"), source=source)
+            clean = line.rstrip("\n")
+            if clean:
+                add_log(clean, source=source)
     except Exception as e:
         add_log(f"Error leyendo stream {source}: {e}", source="SERVER")
 
@@ -52,7 +58,7 @@ def start_main():
         add_log("main.py ya está corriendo.", "SERVER")
         return True
 
-    add_log("Iniciando main.py...", "SERVER")
+    add_log("🚀 Iniciando servicio ETL (main.py)...", "SERVER")
 
     MAIN_PROCESS = subprocess.Popen(
         [sys.executable, MAIN],
@@ -66,7 +72,7 @@ def start_main():
     threading.Thread(target=read_stream, args=(MAIN_PROCESS.stdout, "MAIN-OUT"), daemon=True).start()
     threading.Thread(target=read_stream, args=(MAIN_PROCESS.stderr, "MAIN-ERR"), daemon=True).start()
 
-    add_log(f"main.py iniciado con PID {MAIN_PROCESS.pid}", "SERVER")
+    add_log(f"✅ Servicio ETL iniciado correctamente. PID={MAIN_PROCESS.pid}", "SERVER")
     return True
 
 
@@ -77,32 +83,33 @@ def stop_main():
         return
 
     if MAIN_PROCESS.poll() is not None:
-        add_log("main.py ya estaba detenido.", "SERVER")
+        add_log("El servicio ETL ya estaba detenido.", "SERVER")
         MAIN_PROCESS = None
         return
 
-    add_log("Deteniendo main.py...", "SERVER")
+    add_log("🛑 Deteniendo servicio ETL...", "SERVER")
 
     try:
         MAIN_PROCESS.terminate()
         MAIN_PROCESS.wait(timeout=8)
-        add_log("main.py detenido correctamente.", "SERVER")
+        add_log("✅ Servicio ETL detenido correctamente.", "SERVER")
     except subprocess.TimeoutExpired:
-        add_log("main.py no cerró a tiempo. Forzando cierre...", "SERVER")
+        add_log("⚠️ El servicio ETL no cerró a tiempo. Forzando cierre...", "SERVER")
         try:
             MAIN_PROCESS.kill()
             MAIN_PROCESS.wait(timeout=5)
-            add_log("main.py finalizado por kill().", "SERVER")
+            add_log("✅ Servicio ETL finalizado por cierre forzado.", "SERVER")
         except Exception as e:
-            add_log(f"No se pudo forzar el cierre de main.py: {e}", "SERVER")
+            add_log(f"❌ No se pudo forzar el cierre del servicio ETL: {e}", "SERVER")
     except Exception as e:
-        add_log(f"Error al detener main.py: {e}", "SERVER")
+        add_log(f"❌ Error al detener servicio ETL: {e}", "SERVER")
     finally:
         MAIN_PROCESS = None
 
 
 def restart_main():
     with MAIN_LOCK:
+        add_log("🔄 Reiniciando servicio ETL...", "SERVER")
         stop_main()
         time.sleep(1)
         return start_main()
@@ -112,7 +119,14 @@ def save_json_file(file_name, data):
     path = os.path.join(BASE, f"{file_name}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    add_log(f"Archivo guardado: {file_name}.json", "SERVER")
+
+
+def count_etl_rules(data):
+    return sum(len(d.get("route_rules", [])) for d in data.get("directories", []))
+
+
+def count_notification_rules(data):
+    return sum(len(d.get("recipient_rules", [])) for d in data.get("directories", []))
 
 
 def get_status_payload():
@@ -184,8 +198,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 body = self.rfile.read(content_length)
                 data = json.loads(body.decode("utf-8"))
 
-                save_json_file(file_name, data)
+                if file_name == "etl_config":
+                    total_rules = count_etl_rules(data)
+                    add_log("📝 Se detectó una actualización en configuración ETL.", "CONFIG")
+                    add_log(f"📦 Total de cargas ETL registradas: {total_rules}", "CONFIG")
+                    add_log("💾 Guardando cambios en etl_config.json...", "CONFIG")
+
+                    save_json_file(file_name, data)
+
+                    add_log("✅ etl_config.json actualizado correctamente.", "CONFIG")
+                    add_log("♻️ Aplicando cambios al sistema ETL...", "CONFIG")
+
+                elif file_name == "notification_config":
+                    total_rules = count_notification_rules(data)
+                    add_log("📝 Se detectó una actualización en configuración de notificaciones.", "CONFIG")
+                    add_log(f"🔔 Total de reglas de notificación registradas: {total_rules}", "CONFIG")
+                    add_log("💾 Guardando cambios en notification_config.json...", "CONFIG")
+
+                    save_json_file(file_name, data)
+
+                    add_log("✅ notification_config.json actualizado correctamente.", "CONFIG")
+                    add_log("♻️ Aplicando cambios al sistema ETL...", "CONFIG")
+
                 restarted = restart_main()
+
+                if restarted:
+                    add_log("✅ Cambios aplicados correctamente en el sistema.", "CONFIG")
+                else:
+                    add_log("⚠️ El archivo se guardó, pero no se pudo reiniciar el sistema ETL.", "CONFIG")
 
                 self._json_response(200, {
                     "ok": True,
@@ -193,20 +233,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "main_restarted": restarted
                 })
             except Exception as e:
-                add_log(f"Error guardando {file_name}: {e}", "SERVER")
+                add_log(f"❌ Error guardando {file_name}: {e}", "CONFIG")
                 self._json_response(500, {"ok": False, "error": str(e)})
             return
 
         if path == "/reload-system":
             try:
+                add_log("🔄 Solicitud manual de reinicio del sistema recibida.", "SERVER")
                 restarted = restart_main()
+                if restarted:
+                    add_log("✅ Reinicio manual completado correctamente.", "SERVER")
+                else:
+                    add_log("⚠️ No se pudo completar el reinicio manual.", "SERVER")
+
                 self._json_response(200, {
                     "ok": True,
                     "message": "Sistema recargado correctamente",
                     "main_restarted": restarted
                 })
             except Exception as e:
-                add_log(f"Error en reload-system: {e}", "SERVER")
+                add_log(f"❌ Error en reload-system: {e}", "SERVER")
                 self._json_response(500, {"ok": False, "error": str(e)})
             return
 
@@ -226,7 +272,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def log_message(self, format, *args):
-        add_log(format % args, "HTTP")
+        message = format % args
+
+        # Silenciar endpoints ruidosos que se consultan seguido desde el HTML
+        noisy_paths = (
+            "GET /system-status",
+            "GET /logs"
+        )
+
+        if any(p in message for p in noisy_paths):
+            return
+
+        # Dejar solo logs HTTP realmente útiles
+        add_log(message, "HTTP")
 
 
 if __name__ == "__main__":
@@ -236,18 +294,18 @@ if __name__ == "__main__":
 
     start_main()
 
-    add_log("Servidor listo en http://localhost:8000", "SERVER")
-    add_log("Endpoints disponibles:", "SERVER")
-    add_log("POST /save/etl_config", "SERVER")
-    add_log("POST /save/notification_config", "SERVER")
-    add_log("POST /reload-system", "SERVER")
-    add_log("GET  /system-status", "SERVER")
-    add_log("GET  /logs?limit=300", "SERVER")
+    add_log("🌐 Servidor listo en http://localhost:8000", "SERVER")
+    add_log("📌 Endpoints disponibles:", "SERVER")
+    add_log("   POST /save/etl_config", "SERVER")
+    add_log("   POST /save/notification_config", "SERVER")
+    add_log("   POST /reload-system", "SERVER")
+    add_log("   GET  /system-status", "SERVER")
+    add_log("   GET  /logs?limit=300", "SERVER")
 
     try:
         http.server.ThreadingHTTPServer(("localhost", 8000), Handler).serve_forever()
     except KeyboardInterrupt:
-        add_log("Cerrando servidor...", "SERVER")
+        add_log("🛑 Cerrando servidor...", "SERVER")
     finally:
         stop_main()
-        add_log("Servidor cerrado.", "SERVER")
+        add_log("✅ Servidor cerrado.", "SERVER")
